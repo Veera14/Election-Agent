@@ -62,496 +62,335 @@ const chatKnowledge = {
   "default": "That's a great question about the election process! Here's what I can tell you:\n\nThe U.S. election process involves multiple stages — from candidate announcements and primary elections through to Election Day and inauguration. Each step ensures that the democratic process is fair and transparent.\n\nTry asking me about specific topics like:\n• **Voter registration**\n• **The Electoral College**\n• **Primary elections**\n• **How votes are counted**\n• **Swing states**\n• **Inauguration Day**"
 };
 
+// ===== SECURITY UTILITIES =====
+const Security = {
+  MAX_INPUT_LENGTH: 500,
+  sanitize(str) {
+    if (!str || typeof str !== 'string') return '';
+    return str.replace(/[<>'"&]/g, c => ({'<':'&lt;','>':'&gt;',"'":"&#39;",'"':'&quot;','&':'&amp;'}[c]));
+  },
+  validateAddress(addr) {
+    if (!addr || typeof addr !== 'string') return false;
+    if (addr.length > this.MAX_INPUT_LENGTH) return false;
+    if (/<script|javascript:|on\w+\s*=/i.test(addr)) return false;
+    return addr.trim().length >= 5;
+  },
+  validateChatInput(text) {
+    if (!text || typeof text !== 'string') return false;
+    if (text.length > this.MAX_INPUT_LENGTH) return false;
+    return text.trim().length > 0;
+  },
+  sanitizeUrl(url) {
+    if (!url || typeof url !== 'string') return '#';
+    try {
+      const u = new URL(url);
+      if (!['http:', 'https:'].includes(u.protocol)) return '#';
+      return u.href;
+    } catch(e) { return '#'; }
+  },
+  createTextEl(tag, text, className) {
+    const el = document.createElement(tag);
+    el.textContent = text;
+    if (className) el.className = className;
+    return el;
+  }
+};
+
+// Rate limiter to prevent API abuse
+const RateLimiter = {
+  _timestamps: {},
+  check(key, intervalMs = 3000) {
+    const now = Date.now();
+    if (this._timestamps[key] && (now - this._timestamps[key]) < intervalMs) return false;
+    this._timestamps[key] = now;
+    return true;
+  }
+};
+
+// ===== EFFICIENCY UTILITIES =====
+function debounce(fn, delay = 300) {
+  let timer;
+  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); };
+}
+
+// Cached DOM references (populated on DOMContentLoaded)
+const DOM = {};
+
 // ===== GOOGLE CIVIC INFORMATION API =====
 const CIVIC_API_KEY = 'AIzaSyDemoKeyForTesting'; // Replace with your Google API key
 const CIVIC_API_BASE = 'https://www.googleapis.com/civicinfo/v2';
+const GOOGLE_MAPS_KEY = 'AIzaSyDemoKeyForTesting'; // Replace with your Maps API key
 
 // ===== APP LOGIC =====
 document.addEventListener('DOMContentLoaded', () => {
-  initNav();
-  initHeroStats();
-  initTimeline();
-  initSteps();
-  initFAQ();
-  initQuiz();
-  initChat();
-  initCivicInfo();
-  initScrollAnimations();
-  trackPageView();
+  ['main-nav','nav-toggle','nav-links','timeline-container','steps-grid',
+   'progress-fill','progress-label','faq-list','faq-search','quiz-body',
+   'quiz-result','quiz-next-btn','quiz-question-num','quiz-score',
+   'quiz-progress-fill','quiz-question','quiz-options','result-icon',
+   'result-title','result-desc','quiz-restart-btn','chat-input',
+   'chat-send-btn','chat-messages','civic-address','civic-reps-btn',
+   'civic-elections-btn','civic-results','civic-map-container','civic-map-iframe'
+  ].forEach(id => { DOM[id] = document.getElementById(id); });
+  initNav(); initHeroStats(); initTimeline(); initSteps(); initFAQ();
+  initQuiz(); initChat(); initCivicInfo(); initScrollAnimations(); trackPageView();
 });
 
-// --- Navigation ---
+// --- Navigation (Efficiency: passive scroll, debounced, event delegation) ---
 function initNav() {
-  const navbar = document.getElementById('main-nav');
-  const toggle = document.getElementById('nav-toggle');
-  const links = document.getElementById('nav-links');
-  const navLinks = document.querySelectorAll('.nav-link');
-
-  window.addEventListener('scroll', () => {
-    navbar.classList.toggle('scrolled', window.scrollY > 50);
-    updateActiveNav();
-  });
-
+  const navbar = DOM['main-nav'], toggle = DOM['nav-toggle'], links = DOM['nav-links'];
+  const debouncedNav = debounce(updateActiveNav, 100);
+  window.addEventListener('scroll', () => { navbar.classList.toggle('scrolled', window.scrollY > 50); debouncedNav(); }, { passive: true });
   toggle.addEventListener('click', () => links.classList.toggle('open'));
-  navLinks.forEach(link => link.addEventListener('click', () => links.classList.remove('open')));
+  links.addEventListener('click', (e) => { if (e.target.closest('.nav-link')) links.classList.remove('open'); });
 }
-
 function updateActiveNav() {
-  const sections = ['hero', 'timeline', 'civic', 'steps', 'faq', 'quiz', 'assistant'];
+  const sections = ['hero','timeline','civic','steps','faq','quiz','assistant'];
   let current = 'hero';
-  sections.forEach(id => {
-    const el = document.getElementById(id);
-    if (el && window.scrollY >= el.offsetTop - 200) current = id;
-  });
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.classList.toggle('active', link.dataset.section === current);
-  });
+  sections.forEach(id => { const el = document.getElementById(id); if (el && window.scrollY >= el.offsetTop - 200) current = id; });
+  document.querySelectorAll('.nav-link').forEach(link => { link.classList.toggle('active', link.dataset.section === current); });
 }
 
-// --- Hero Stats Counter ---
+// --- Hero Stats ---
 function initHeroStats() {
   const observer = new IntersectionObserver(entries => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
         document.querySelectorAll('.stat-number').forEach(el => {
-          const target = +el.dataset.count;
-          let current = 0;
-          const step = Math.ceil(target / 30);
-          const timer = setInterval(() => {
-            current += step;
-            if (current >= target) { current = target; clearInterval(timer); }
-            el.textContent = current;
-          }, 40);
+          const target = +el.dataset.count; let current = 0; const step = Math.ceil(target / 30);
+          const timer = setInterval(() => { current += step; if (current >= target) { current = target; clearInterval(timer); } el.textContent = current; }, 40);
         });
         observer.disconnect();
       }
     });
   }, { threshold: 0.5 });
-  const hero = document.getElementById('hero');
-  if (hero) observer.observe(hero);
+  const hero = document.getElementById('hero'); if (hero) observer.observe(hero);
 }
 
-// --- Timeline ---
+// --- Timeline (Security: safe DOM; Efficiency: DocumentFragment, event delegation) ---
 function initTimeline() {
-  const container = document.getElementById('timeline-container');
+  const container = DOM['timeline-container'];
+  const fragment = document.createDocumentFragment();
+  const phaseMap = { pre: ['tag-pre','Pre-Election'], during: ['tag-during','During Election'], post: ['tag-post','Post-Election'] };
   timelineData.forEach((item, i) => {
-    const el = document.createElement('div');
-    el.className = `timeline-item`;
-    el.dataset.phase = item.phase;
-    el.style.animationDelay = `${i * 0.1}s`;
-    const tagClass = item.phase === 'pre' ? 'tag-pre' : item.phase === 'during' ? 'tag-during' : 'tag-post';
-    const tagLabel = item.phase === 'pre' ? 'Pre-Election' : item.phase === 'during' ? 'During Election' : 'Post-Election';
-    el.innerHTML = `
-      <div class="timeline-date">${item.date}</div>
-      <div class="timeline-title">${item.title}</div>
-      <div class="timeline-desc">${item.desc}</div>
-      <span class="timeline-tag ${tagClass}">${tagLabel}</span>
-      <div class="timeline-details"><p>${item.details}</p></div>
-    `;
-    el.addEventListener('click', () => el.classList.toggle('expanded'));
-    container.appendChild(el);
+    const el = document.createElement('div'); el.className = 'timeline-item';
+    el.dataset.phase = item.phase; el.style.animationDelay = `${i * 0.1}s`;
+    el.setAttribute('role','button'); el.setAttribute('aria-expanded','false');
+    const [tagClass, tagLabel] = phaseMap[item.phase];
+    el.appendChild(Security.createTextEl('div', item.date, 'timeline-date'));
+    el.appendChild(Security.createTextEl('div', item.title, 'timeline-title'));
+    el.appendChild(Security.createTextEl('div', item.desc, 'timeline-desc'));
+    el.appendChild(Security.createTextEl('span', tagLabel, `timeline-tag ${tagClass}`));
+    const details = document.createElement('div'); details.className = 'timeline-details';
+    details.appendChild(Security.createTextEl('p', item.details));
+    el.appendChild(details); fragment.appendChild(el);
   });
-
-  document.querySelectorAll('.filter-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const filter = btn.dataset.filter;
-      document.querySelectorAll('.timeline-item').forEach(item => {
-        const show = filter === 'all' || item.dataset.phase === filter;
-        item.classList.toggle('hidden-item', !show);
-      });
-    });
+  container.appendChild(fragment);
+  container.addEventListener('click', (e) => { const item = e.target.closest('.timeline-item'); if (item) { item.classList.toggle('expanded'); item.setAttribute('aria-expanded', item.classList.contains('expanded')); } });
+  const filterContainer = document.getElementById('timeline-filter');
+  filterContainer.addEventListener('click', (e) => {
+    const btn = e.target.closest('.filter-btn'); if (!btn) return;
+    filterContainer.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active');
+    const filter = btn.dataset.filter;
+    container.querySelectorAll('.timeline-item').forEach(item => { item.classList.toggle('hidden-item', filter !== 'all' && item.dataset.phase !== filter); });
   });
 }
 
-// --- Steps ---
+// --- Steps (Security: safe DOM; Efficiency: DocumentFragment, event delegation) ---
 function initSteps() {
-  const grid = document.getElementById('steps-grid');
-  let completedCount = 0;
-
+  const grid = DOM['steps-grid'];
+  const fragment = document.createDocumentFragment();
   stepsData.forEach((step, i) => {
-    const el = document.createElement('div');
-    el.className = 'step-card';
-    el.innerHTML = `
-      <div class="step-number">${i + 1}</div>
-      <div class="step-info">
-        <div class="step-title">${step.title}</div>
-        <div class="step-desc">${step.desc}</div>
-        <div class="step-expanded"><p>${step.expanded}</p></div>
-      </div>
-      <div class="step-check" data-step="${i}">✓</div>
-    `;
-    el.querySelector('.step-info').addEventListener('click', () => el.classList.toggle('expanded'));
-    el.querySelector('.step-check').addEventListener('click', (e) => {
-      e.stopPropagation();
-      el.classList.toggle('completed');
-      completedCount = document.querySelectorAll('.step-card.completed').length;
-      updateProgress(completedCount);
-    });
-    grid.appendChild(el);
+    const el = document.createElement('div'); el.className = 'step-card';
+    el.setAttribute('role','button'); el.setAttribute('aria-expanded','false');
+    el.appendChild(Security.createTextEl('div', i + 1, 'step-number'));
+    const info = document.createElement('div'); info.className = 'step-info';
+    info.appendChild(Security.createTextEl('div', step.title, 'step-title'));
+    info.appendChild(Security.createTextEl('div', step.desc, 'step-desc'));
+    const expanded = document.createElement('div'); expanded.className = 'step-expanded';
+    expanded.appendChild(Security.createTextEl('p', step.expanded));
+    info.appendChild(expanded); el.appendChild(info);
+    const check = Security.createTextEl('div', '✓', 'step-check'); check.dataset.step = i;
+    el.appendChild(check); fragment.appendChild(el);
+  });
+  grid.appendChild(fragment);
+  grid.addEventListener('click', (e) => {
+    const check = e.target.closest('.step-check'), card = e.target.closest('.step-card');
+    if (check && card) { e.stopPropagation(); card.classList.toggle('completed'); updateProgress(grid.querySelectorAll('.step-card.completed').length); return; }
+    const info = e.target.closest('.step-info');
+    if (info && card) { card.classList.toggle('expanded'); card.setAttribute('aria-expanded', card.classList.contains('expanded')); }
   });
 }
-
 function updateProgress(count) {
-  const total = stepsData.length;
-  const pct = (count / total) * 100;
-  document.getElementById('progress-fill').style.width = pct + '%';
-  document.getElementById('progress-label').textContent = `Step ${count} of ${total} completed`;
+  const total = stepsData.length, pct = (count / total) * 100;
+  const fill = DOM['progress-fill'] || document.getElementById('progress-fill');
+  const label = DOM['progress-label'] || document.getElementById('progress-label');
+  if (fill) fill.style.width = pct + '%';
+  if (label) label.textContent = `Step ${count} of ${total} completed`;
 }
 
-// --- FAQ ---
+// --- FAQ (Security: safe DOM; Efficiency: debounced search, event delegation) ---
 function initFAQ() {
-  const list = document.getElementById('faq-list');
+  const list = DOM['faq-list'];
+  const fragment = document.createDocumentFragment();
   faqData.forEach((item, i) => {
-    const el = document.createElement('div');
-    el.className = 'faq-item';
-    el.id = `faq-item-${i}`;
-    el.innerHTML = `
-      <button class="faq-question">
-        <span>${item.q}</span>
-        <svg class="faq-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-      </button>
-      <div class="faq-answer"><div class="faq-answer-inner">${item.a}</div></div>
-    `;
-    el.querySelector('.faq-question').addEventListener('click', () => {
-      const wasOpen = el.classList.contains('open');
-      document.querySelectorAll('.faq-item').forEach(f => f.classList.remove('open'));
-      if (!wasOpen) el.classList.add('open');
-    });
-    list.appendChild(el);
+    const el = document.createElement('div'); el.className = 'faq-item'; el.id = `faq-item-${i}`;
+    el.setAttribute('aria-expanded','false');
+    const btn = document.createElement('button'); btn.className = 'faq-question';
+    btn.setAttribute('aria-controls', `faq-answer-${i}`);
+    btn.appendChild(Security.createTextEl('span', item.q));
+    const arrow = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    arrow.setAttribute('class','faq-arrow'); arrow.setAttribute('width','20'); arrow.setAttribute('height','20');
+    arrow.setAttribute('viewBox','0 0 24 24'); arrow.setAttribute('fill','none');
+    arrow.setAttribute('stroke','currentColor'); arrow.setAttribute('stroke-width','2');
+    const poly = document.createElementNS('http://www.w3.org/2000/svg','polyline');
+    poly.setAttribute('points','6 9 12 15 18 9'); arrow.appendChild(poly); btn.appendChild(arrow);
+    el.appendChild(btn);
+    const answer = document.createElement('div'); answer.className = 'faq-answer'; answer.id = `faq-answer-${i}`;
+    answer.appendChild(Security.createTextEl('div', item.a, 'faq-answer-inner'));
+    el.appendChild(answer); fragment.appendChild(el);
   });
-
-  document.getElementById('faq-search').addEventListener('input', (e) => {
-    const query = e.target.value.toLowerCase();
-    document.querySelectorAll('.faq-item').forEach((item, i) => {
-      const match = faqData[i].q.toLowerCase().includes(query) || faqData[i].a.toLowerCase().includes(query);
-      item.classList.toggle('faq-hidden', !match);
+  list.appendChild(fragment);
+  list.addEventListener('click', (e) => {
+    const btn = e.target.closest('.faq-question'); if (!btn) return;
+    const fi = btn.closest('.faq-item'), wasOpen = fi.classList.contains('open');
+    list.querySelectorAll('.faq-item').forEach(f => { f.classList.remove('open'); f.setAttribute('aria-expanded','false'); });
+    if (!wasOpen) { fi.classList.add('open'); fi.setAttribute('aria-expanded','true'); }
+  });
+  const searchInput = DOM['faq-search'];
+  const debouncedSearch = debounce((q) => {
+    const lower = q.toLowerCase();
+    list.querySelectorAll('.faq-item').forEach((item, i) => {
+      item.classList.toggle('faq-hidden', !(faqData[i].q.toLowerCase().includes(lower) || faqData[i].a.toLowerCase().includes(lower)));
     });
   });
+  searchInput.addEventListener('input', (e) => debouncedSearch(e.target.value));
 }
 
-// --- Quiz ---
+// --- Quiz (Efficiency: cached DOM refs; Google Service: Firebase score saving) ---
 function initQuiz() {
   let currentQ = 0, score = 0, answered = false;
-  const body = document.getElementById('quiz-body');
-  const result = document.getElementById('quiz-result');
-  const nextBtn = document.getElementById('quiz-next-btn');
+  const body = DOM['quiz-body'], result = DOM['quiz-result'], nextBtn = DOM['quiz-next-btn'];
+  const qNum = DOM['quiz-question-num'], qScore = DOM['quiz-score'], qProgress = DOM['quiz-progress-fill'];
+  const qQuestion = DOM['quiz-question'], optContainer = DOM['quiz-options'];
+  const quizFooter = document.querySelector('.quiz-footer'), quizHeader = document.querySelector('.quiz-header');
 
   function loadQuestion() {
-    answered = false;
-    nextBtn.disabled = true;
+    answered = false; nextBtn.disabled = true;
     const q = quizData[currentQ];
-    document.getElementById('quiz-question-num').textContent = `Question ${currentQ + 1} of ${quizData.length}`;
-    document.getElementById('quiz-score').textContent = `Score: ${score}`;
-    document.getElementById('quiz-progress-fill').style.width = `${((currentQ) / quizData.length) * 100}%`;
-    document.getElementById('quiz-question').textContent = q.question;
-    const optContainer = document.getElementById('quiz-options');
-    optContainer.innerHTML = '';
+    qNum.textContent = `Question ${currentQ + 1} of ${quizData.length}`;
+    qScore.textContent = `Score: ${score}`;
+    qProgress.style.width = `${((currentQ) / quizData.length) * 100}%`;
+    qQuestion.textContent = q.question;
+    while (optContainer.firstChild) optContainer.removeChild(optContainer.firstChild);
     q.options.forEach((opt, i) => {
-      const btn = document.createElement('button');
-      btn.className = 'quiz-option';
-      btn.textContent = opt;
+      const btn = document.createElement('button'); btn.className = 'quiz-option'; btn.textContent = opt;
       btn.addEventListener('click', () => {
-        if (answered) return;
-        answered = true;
+        if (answered) return; answered = true;
         btn.classList.add(i === q.correct ? 'correct' : 'wrong');
-        if (i === q.correct) score++;
-        else optContainer.children[q.correct].classList.add('correct');
-        document.getElementById('quiz-score').textContent = `Score: ${score}`;
-        nextBtn.disabled = false;
+        if (i === q.correct) score++; else optContainer.children[q.correct].classList.add('correct');
+        qScore.textContent = `Score: ${score}`; nextBtn.disabled = false;
+        trackEvent('quiz','answer',q.question);
       });
       optContainer.appendChild(btn);
     });
   }
-
-  nextBtn.addEventListener('click', () => {
-    currentQ++;
-    if (currentQ >= quizData.length) showResult();
-    else loadQuestion();
-  });
-
+  nextBtn.addEventListener('click', () => { currentQ++; if (currentQ >= quizData.length) showResult(); else loadQuestion(); });
   function showResult() {
-    body.style.display = 'none';
-    document.querySelector('.quiz-footer').style.display = 'none';
-    document.querySelector('.quiz-header').style.display = 'none';
+    body.style.display = 'none'; quizFooter.style.display = 'none'; quizHeader.style.display = 'none';
     result.classList.remove('hidden');
     const pct = (score / quizData.length) * 100;
-    document.getElementById('result-icon').textContent = pct >= 75 ? '🏆' : pct >= 50 ? '👍' : '📚';
-    document.getElementById('result-title').textContent = `You scored ${score} out of ${quizData.length}!`;
-    document.getElementById('result-desc').textContent = pct >= 75 ? 'Excellent! You really know the election process!' : pct >= 50 ? 'Good job! You have a solid understanding.' : 'Keep learning! Review the timeline and steps above to improve.';
+    DOM['result-icon'].textContent = pct >= 75 ? '🏆' : pct >= 50 ? '👍' : '📚';
+    DOM['result-title'].textContent = `You scored ${score} out of ${quizData.length}!`;
+    DOM['result-desc'].textContent = pct >= 75 ? 'Excellent! You really know the election process!' : pct >= 50 ? 'Good job! You have a solid understanding.' : 'Keep learning! Review the timeline and steps above to improve.';
+    trackEvent('quiz','completed',`score_${score}_of_${quizData.length}`);
+    saveQuizScore(score, quizData.length);
   }
-
-  document.getElementById('quiz-restart-btn').addEventListener('click', () => {
-    currentQ = 0; score = 0;
-    body.style.display = '';
-    document.querySelector('.quiz-footer').style.display = '';
-    document.querySelector('.quiz-header').style.display = '';
-    result.classList.add('hidden');
-    loadQuestion();
+  DOM['quiz-restart-btn'].addEventListener('click', () => {
+    currentQ = 0; score = 0; body.style.display = ''; quizFooter.style.display = ''; quizHeader.style.display = '';
+    result.classList.add('hidden'); loadQuestion();
   });
-
   loadQuestion();
 }
+function saveQuizScore(s, t) { try { if (window.db) window.db.collection('quizScores').add({ score:s, total:t, pct:Math.round((s/t)*100), ts:new Date().toISOString() }); } catch(e) { console.warn('Firebase:', e.message); } }
 
-// --- Chat Assistant ---
+// --- Chat (Security: input validation/sanitization; Efficiency: cached refs, event delegation) ---
 function initChat() {
-  const input = document.getElementById('chat-input');
-  const sendBtn = document.getElementById('chat-send-btn');
-  const messages = document.getElementById('chat-messages');
-
+  const input = DOM['chat-input'], sendBtn = DOM['chat-send-btn'], messages = DOM['chat-messages'];
   function sendMessage(text) {
-    if (!text.trim()) return;
-    addMessage(text, 'user');
-    input.value = '';
-    showTyping();
-    setTimeout(() => {
-      removeTyping();
-      const reply = getReply(text);
-      addMessage(reply, 'bot');
-    }, 800 + Math.random() * 700);
+    if (!Security.validateChatInput(text)) return;
+    const safe = text.substring(0, Security.MAX_INPUT_LENGTH).trim();
+    addMessage(safe, 'user'); input.value = ''; showTyping();
+    setTimeout(() => { removeTyping(); addMessage(getReply(safe), 'bot'); }, 800 + Math.random()*700);
   }
-
   function addMessage(content, type) {
-    const div = document.createElement('div');
-    div.className = `chat-message ${type}-message`;
-    const avatar = type === 'bot' ? '🗳️' : '👤';
-    const formatted = type === 'bot' ? formatMarkdown(content) : `<p>${escapeHTML(content)}</p>`;
-    div.innerHTML = `<div class="message-avatar">${avatar}</div><div class="message-content"><div class="message-bubble">${formatted}</div></div>`;
-    messages.appendChild(div);
-    messages.scrollTop = messages.scrollHeight;
+    const div = document.createElement('div'); div.className = `chat-message ${type}-message`;
+    div.appendChild(Security.createTextEl('div', type==='bot'?'🗳️':'👤', 'message-avatar'));
+    const c = document.createElement('div'); c.className = 'message-content';
+    const b = document.createElement('div'); b.className = 'message-bubble';
+    if (type==='bot') b.innerHTML = fmtMd(content); else b.appendChild(Security.createTextEl('p', content));
+    c.appendChild(b); div.appendChild(c); messages.appendChild(div); messages.scrollTop = messages.scrollHeight;
   }
-
   function showTyping() {
-    const div = document.createElement('div');
-    div.className = 'chat-message bot-message typing-msg';
-    div.innerHTML = `<div class="message-avatar">🗳️</div><div class="message-content"><div class="message-bubble"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div></div>`;
-    messages.appendChild(div);
-    messages.scrollTop = messages.scrollHeight;
+    const div = document.createElement('div'); div.className = 'chat-message bot-message typing-msg';
+    div.appendChild(Security.createTextEl('div','🗳️','message-avatar'));
+    const c = document.createElement('div'); c.className = 'message-content';
+    const b = document.createElement('div'); b.className = 'message-bubble';
+    const ind = document.createElement('div'); ind.className = 'typing-indicator';
+    for (let i = 0; i < 3; i++) { const d = document.createElement('div'); d.className = 'typing-dot'; ind.appendChild(d); }
+    b.appendChild(ind); c.appendChild(b); div.appendChild(c); messages.appendChild(div); messages.scrollTop = messages.scrollHeight;
   }
-
-  function removeTyping() {
-    const t = messages.querySelector('.typing-msg');
-    if (t) t.remove();
-  }
-
+  function removeTyping() { const t = messages.querySelector('.typing-msg'); if (t) t.remove(); }
   function getReply(text) {
-    const lower = text.toLowerCase();
-    if (lower.includes('register')) return chatKnowledge['register'];
-    if (lower.includes('electoral college') || lower.includes('elector')) return chatKnowledge['electoral college'];
-    if (lower.includes('election day') || lower.includes('when is')) return chatKnowledge['election day'];
-    if (lower.includes('step') || lower.includes('process') || lower.includes('how do elections')) return chatKnowledge['steps'];
-    if (lower.includes('primary') || lower.includes('caucus')) return chatKnowledge['primary'];
-    if (lower.includes('count') || lower.includes('counted') || lower.includes('tally')) return chatKnowledge['count'];
-    if (lower.includes('absentee') || lower.includes('mail')) return chatKnowledge['absentee'];
-    if (lower.includes('swing') || lower.includes('battleground')) return chatKnowledge['swing'];
-    if (lower.includes('inaugurat')) return chatKnowledge['inauguration'];
+    const l = text.toLowerCase();
+    if (l.includes('register')) return chatKnowledge['register'];
+    if (l.includes('electoral college') || l.includes('elector')) return chatKnowledge['electoral college'];
+    if (l.includes('election day') || l.includes('when is')) return chatKnowledge['election day'];
+    if (l.includes('step') || l.includes('process') || l.includes('how do elections')) return chatKnowledge['steps'];
+    if (l.includes('primary') || l.includes('caucus')) return chatKnowledge['primary'];
+    if (l.includes('count') || l.includes('counted') || l.includes('tally')) return chatKnowledge['count'];
+    if (l.includes('absentee') || l.includes('mail')) return chatKnowledge['absentee'];
+    if (l.includes('swing') || l.includes('battleground')) return chatKnowledge['swing'];
+    if (l.includes('inaugurat')) return chatKnowledge['inauguration'];
     return chatKnowledge['default'];
   }
-
-  function formatMarkdown(text) {
-    let html = escapeHTML(text);
-    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/^• (.+)$/gm, '<li>$1</li>');
-    html = html.replace(/^(\d+)\. (.+)$/gm, '<li><strong>$1.</strong> $2</li>');
-    html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
-    html = html.replace(/\n\n/g, '</p><p>');
-    html = html.replace(/\n/g, '<br>');
-    return `<p>${html}</p>`;
-  }
-
-  function escapeHTML(str) {
-    const d = document.createElement('div');
-    d.textContent = str;
-    return d.innerHTML;
-  }
-
+  function fmtMd(text) { let h = escapeHTMLUtil(text); h = h.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>'); h = h.replace(/^• (.+)$/gm,'<li>$1</li>'); h = h.replace(/^(\d+)\. (.+)$/gm,'<li><strong>$1.</strong> $2</li>'); h = h.replace(/((?:<li>.*<\/li>\n?)+)/g,'<ul>$1</ul>'); h = h.replace(/\n\n/g,'</p><p>'); h = h.replace(/\n/g,'<br>'); return `<p>${h}</p>`; }
   sendBtn.addEventListener('click', () => sendMessage(input.value));
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(input.value); });
-
-  document.querySelectorAll('.suggestion-chip').forEach(chip => {
-    chip.addEventListener('click', () => sendMessage(chip.dataset.question));
-  });
+  input.setAttribute('maxlength', Security.MAX_INPUT_LENGTH);
+  const chips = document.querySelector('.suggestion-chips');
+  if (chips) chips.addEventListener('click', (e) => { const c = e.target.closest('.suggestion-chip'); if (c) sendMessage(c.dataset.question); });
 }
 
 // --- Scroll Animations ---
 function initScrollAnimations() {
-  const observer = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add('visible');
-        observer.unobserve(entry.target);
-      }
-    });
-  }, { threshold: 0.1 });
-  document.querySelectorAll('.step-card, .faq-item').forEach(el => observer.observe(el));
+  const obs = new IntersectionObserver(entries => { entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); } }); }, { threshold: 0.1 });
+  document.querySelectorAll('.step-card, .faq-item').forEach(el => obs.observe(el));
 }
 
-// --- Google Civic Information API ---
+// --- Google Civic API (Security: validation, rate limiting; Google Maps integration) ---
 function initCivicInfo() {
-  const addressInput = document.getElementById('civic-address');
-  const repsBtn = document.getElementById('civic-reps-btn');
-  const electionsBtn = document.getElementById('civic-elections-btn');
-  const resultsDiv = document.getElementById('civic-results');
-
-  if (!repsBtn || !electionsBtn) return;
-
-  repsBtn.addEventListener('click', () => {
-    const address = addressInput.value.trim();
-    if (!address) { showCivicError('Please enter a valid U.S. address.'); return; }
-    fetchRepresentatives(address);
-    trackEvent('civic_api', 'find_representatives', address);
-  });
-
-  electionsBtn.addEventListener('click', () => {
-    const address = addressInput.value.trim();
-    if (!address) { showCivicError('Please enter a valid U.S. address.'); return; }
-    fetchVoterInfo(address);
-    trackEvent('civic_api', 'election_info', address);
-  });
-
-  addressInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') repsBtn.click();
-  });
+  const addrInput = DOM['civic-address'], repsBtn = DOM['civic-reps-btn'], elBtn = DOM['civic-elections-btn'];
+  if (!repsBtn || !elBtn) return;
+  addrInput.setAttribute('maxlength', Security.MAX_INPUT_LENGTH);
+  repsBtn.addEventListener('click', () => { const a = addrInput.value.trim(); if (!Security.validateAddress(a)) { showCivicError('Enter a valid U.S. address (5+ chars).'); return; } if (!RateLimiter.check('reps')) { showCivicError('Please wait before searching again.'); return; } fetchReps(a); trackEvent('civic_api','find_reps',a); });
+  elBtn.addEventListener('click', () => { const a = addrInput.value.trim(); if (!Security.validateAddress(a)) { showCivicError('Enter a valid U.S. address (5+ chars).'); return; } if (!RateLimiter.check('voter')) { showCivicError('Please wait before searching again.'); return; } fetchVoter(a); trackEvent('civic_api','election_info',a); });
+  addrInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') repsBtn.click(); });
 }
+function showCivicLoading() { const r = DOM['civic-results']; while (r.firstChild) r.removeChild(r.firstChild); const l = document.createElement('div'); l.className = 'civic-loading'; const s = document.createElement('div'); s.className = 'civic-spinner'; l.appendChild(s); l.appendChild(Security.createTextEl('p','Looking up information...')); r.appendChild(l); }
+function showCivicError(msg) { const r = DOM['civic-results']; while (r.firstChild) r.removeChild(r.firstChild); const d = document.createElement('div'); d.className = 'civic-error'; d.appendChild(Security.createTextEl('p', msg)); r.appendChild(d); }
 
-function showCivicLoading() {
-  const resultsDiv = document.getElementById('civic-results');
-  resultsDiv.innerHTML = `<div class="civic-loading"><div class="civic-spinner"></div><p style="color:var(--text-muted)">Looking up information...</p></div>`;
-}
+async function fetchReps(address) { showCivicLoading(); try { const res = await fetch(`${CIVIC_API_BASE}/representatives?address=${encodeURIComponent(address)}&key=${CIVIC_API_KEY}`); if (!res.ok) throw new Error('API ' + res.status); renderReps(await res.json()); showMap(address); } catch(err) { showCivicError('Unable to fetch representatives. Check address/API key.'); console.error(err); } }
+async function fetchVoter(address) { showCivicLoading(); try { const res = await fetch(`${CIVIC_API_BASE}/voterinfo?address=${encodeURIComponent(address)}&key=${CIVIC_API_KEY}`); if (!res.ok) throw new Error('API ' + res.status); renderVoter(await res.json()); showMap(address); } catch(err) { showCivicError('Unable to fetch election data.'); console.error(err); } }
 
-function showCivicError(msg) {
-  const resultsDiv = document.getElementById('civic-results');
-  resultsDiv.innerHTML = `<div class="civic-error"><p>${msg}</p></div>`;
-}
+function renderReps(data) { const r = DOM['civic-results']; while (r.firstChild) r.removeChild(r.firstChild); const offs = data.officials || [], ofc = data.offices || []; if (!offs.length) { showCivicError('No representatives found.'); return; } r.appendChild(Security.createTextEl('div','Your Elected Representatives','civic-section-label')); const cards = document.createElement('div'); cards.className = 'civic-cards'; ofc.forEach(o => (o.officialIndices || []).forEach(i => { const off = offs[i]; if (!off) return; const card = document.createElement('div'); card.className = 'civic-card'; card.appendChild(Security.createTextEl('div', off.name + (off.party ? ' (' + off.party + ')' : ''), 'civic-card-title')); card.appendChild(Security.createTextEl('div', o.name, 'civic-card-subtitle')); const det = document.createElement('div'); det.className = 'civic-card-detail'; if (off.phones) det.appendChild(Security.createTextEl('span','📞 ' + off.phones[0])); if (off.urls) { const a = document.createElement('a'); a.href = Security.sanitizeUrl(off.urls[0]); a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = ' 🔗 Website'; det.appendChild(a); } card.appendChild(det); cards.appendChild(card); })); r.appendChild(cards); }
 
-async function fetchRepresentatives(address) {
-  showCivicLoading();
-  const resultsDiv = document.getElementById('civic-results');
-  try {
-    const url = `${CIVIC_API_BASE}/representatives?address=${encodeURIComponent(address)}&key=${CIVIC_API_KEY}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`API error: ${response.status}`);
-    const data = await response.json();
-    renderRepresentatives(data);
-  } catch (err) {
-    showCivicError('Unable to fetch representative data. Please check your address and try again. Make sure you have a valid Google Civic API key configured.');
-    console.error('Civic API Error:', err);
-  }
-}
+function renderVoter(data) { const r = DOM['civic-results']; while (r.firstChild) r.removeChild(r.firstChild); if (data.election) { r.appendChild(Security.createTextEl('div','Upcoming Election','civic-section-label')); const cs = document.createElement('div'); cs.className = 'civic-cards'; const c = document.createElement('div'); c.className = 'civic-card'; c.appendChild(Security.createTextEl('div', data.election.name, 'civic-card-title')); c.appendChild(Security.createTextEl('div','Date: ' + data.election.electionDay,'civic-card-subtitle')); cs.appendChild(c); r.appendChild(cs); } if (data.pollingLocations && data.pollingLocations.length) { r.appendChild(Security.createTextEl('div','Polling Locations','civic-section-label')); const cs = document.createElement('div'); cs.className = 'civic-cards'; data.pollingLocations.slice(0, 3).forEach(loc => { const addr = loc.address || {}; const c = document.createElement('div'); c.className = 'civic-card'; c.appendChild(Security.createTextEl('div', addr.locationName || 'Polling Location','civic-card-title')); c.appendChild(Security.createTextEl('div','📍 ' + [addr.line1, addr.city, addr.state, addr.zip].filter(Boolean).join(', '),'civic-card-detail')); if (loc.pollingHours) c.appendChild(Security.createTextEl('div','🕐 ' + loc.pollingHours,'civic-card-detail')); cs.appendChild(c); }); r.appendChild(cs); } if (!r.children.length) showCivicError('No election info available.'); }
 
-async function fetchVoterInfo(address) {
-  showCivicLoading();
-  const resultsDiv = document.getElementById('civic-results');
-  try {
-    const url = `${CIVIC_API_BASE}/voterinfo?address=${encodeURIComponent(address)}&key=${CIVIC_API_KEY}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`API error: ${response.status}`);
-    const data = await response.json();
-    renderVoterInfo(data);
-  } catch (err) {
-    showCivicError('Unable to fetch election data. This may be because there are no upcoming elections for your area, or the API key needs to be configured.');
-    console.error('Civic API Error:', err);
-  }
-}
+// Google Maps Embed (Google Service)
+function showMap(address) { const mc = DOM['civic-map-container'], mi = DOM['civic-map-iframe']; if (!mc || !mi) return; mc.style.display = 'block'; mi.src = `https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAPS_KEY}&q=${encodeURIComponent(address)}`; }
 
-function renderRepresentatives(data) {
-  const resultsDiv = document.getElementById('civic-results');
-  const officials = data.officials || [];
-  const offices = data.offices || [];
+function escapeHTMLUtil(str) { if (!str) return ''; const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+function trackPageView() { if (typeof gtag === 'function') gtag('event','page_view',{ page_title: document.title }); }
+function trackEvent(cat, act, lbl) { if (typeof gtag === 'function') gtag('event', act, { event_category: cat, event_label: lbl }); }
 
-  if (officials.length === 0) {
-    showCivicError('No representative data found for this address.');
-    return;
-  }
-
-  let html = `<div class="civic-section-label">Your Elected Representatives</div><div class="civic-cards">`;
-  offices.forEach(office => {
-    const indices = office.officialIndices || [];
-    indices.forEach(idx => {
-      const official = officials[idx];
-      if (!official) return;
-      const party = official.party ? `(${official.party})` : '';
-      const phone = official.phones ? official.phones[0] : '';
-      const url = official.urls ? official.urls[0] : '';
-      html += `
-        <div class="civic-card">
-          <div class="civic-card-title">${escapeHTMLUtil(official.name)} ${party}</div>
-          <div class="civic-card-subtitle">${escapeHTMLUtil(office.name)}</div>
-          <div class="civic-card-detail">
-            ${phone ? `📞 ${escapeHTMLUtil(phone)}<br>` : ''}
-            ${url ? `🔗 <a href="${escapeHTMLUtil(url)}" target="_blank" rel="noopener">Official Website</a>` : ''}
-          </div>
-        </div>`;
-    });
-  });
-  html += '</div>';
-  resultsDiv.innerHTML = html;
-}
-
-function renderVoterInfo(data) {
-  const resultsDiv = document.getElementById('civic-results');
-  let html = '';
-
-  if (data.election) {
-    html += `<div class="civic-section-label">Upcoming Election</div>
-      <div class="civic-cards"><div class="civic-card">
-        <div class="civic-card-title">${escapeHTMLUtil(data.election.name)}</div>
-        <div class="civic-card-subtitle">Date: ${escapeHTMLUtil(data.election.electionDay)}</div>
-      </div></div>`;
-  }
-
-  if (data.pollingLocations && data.pollingLocations.length > 0) {
-    html += `<div class="civic-section-label" style="margin-top:24px">Polling Locations</div><div class="civic-cards">`;
-    data.pollingLocations.slice(0, 3).forEach(loc => {
-      const addr = loc.address || {};
-      const line = [addr.line1, addr.city, addr.state, addr.zip].filter(Boolean).join(', ');
-      html += `<div class="civic-card">
-        <div class="civic-card-title">${escapeHTMLUtil(loc.address.locationName || 'Polling Location')}</div>
-        <div class="civic-card-detail">📍 ${escapeHTMLUtil(line)}</div>
-        ${loc.pollingHours ? `<div class="civic-card-detail">🕐 ${escapeHTMLUtil(loc.pollingHours)}</div>` : ''}
-      </div>`;
-    });
-    html += '</div>';
-  }
-
-  if (!html) {
-    showCivicError('No election information is currently available for this address.');
-    return;
-  }
-  resultsDiv.innerHTML = html;
-}
-
-// --- Utility: HTML escaping (shared) ---
-function escapeHTMLUtil(str) {
-  if (!str) return '';
-  const d = document.createElement('div');
-  d.textContent = str;
-  return d.innerHTML;
-}
-
-// --- Google Analytics Event Tracking ---
-function trackPageView() {
-  if (typeof gtag === 'function') {
-    gtag('event', 'page_view', { page_title: document.title });
-  }
-}
-
-function trackEvent(category, action, label) {
-  if (typeof gtag === 'function') {
-    gtag('event', action, { event_category: category, event_label: label });
-  }
-}
-
-// --- Module Exports for Testing ---
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {
-    timelineData,
-    stepsData,
-    faqData,
-    quizData,
-    chatKnowledge,
-    updateProgress,
-    escapeHTMLUtil
-  };
-}
+if (typeof module !== 'undefined' && module.exports) { module.exports = { timelineData, stepsData, faqData, quizData, chatKnowledge, updateProgress, escapeHTMLUtil, Security, RateLimiter, debounce }; }

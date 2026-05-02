@@ -5,19 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ElectGuide — Your Interactive Election Process Assistant</title>
     <meta name="description" content="Understand the election process, timelines, and steps in an interactive and easy-to-follow way with ElectGuide.">
+
+    <!-- Security Headers -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://translate.google.com https://translate.googleapis.com https://www.gstatic.com https://www.google.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://translate.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://www.googleapis.com https://civicinfo.googleapis.com https://firestore.googleapis.com https://www.google-analytics.com https://translate.googleapis.com; frame-src https://www.google.com https://maps.google.com;">
+
+    <!-- Google Fonts (Preconnect + Load) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="index.css">
 
-    <!-- Google Analytics -->
+    <!-- Google Analytics (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
-      gtag('config', 'G-XXXXXXXXXX');
+      gtag('config', 'G-XXXXXXXXXX', {
+        anonymize_ip: true,
+        cookie_flags: 'SameSite=Strict;Secure'
+      });
     </script>
+
+    <!-- Firebase SDK (Google Service: Firestore for quiz score persistence) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
     <!-- Animated Background -->
@@ -176,6 +193,12 @@
                         <div class="civic-placeholder-icon">🏛️</div>
                         <p>Enter your address above to look up your representatives and election information using the <strong>Google Civic Information API</strong>.</p>
                     </div>
+                </div>
+
+                <!-- Google Maps Embed (Google Service: Maps) -->
+                <div class="civic-map-container" id="civic-map-container" style="margin-top:24px;display:none;">
+                    <div class="civic-section-label">📍 Polling Location Map</div>
+                    <iframe id="civic-map-iframe" class="civic-map-iframe" width="100%" height="300" style="border:0;border-radius:var(--radius-sm);" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade" sandbox="allow-scripts allow-same-origin" title="Polling location map"></iframe>
                 </div>
             </div>
         </div>
@@ -352,7 +375,7 @@
         </div>
     </footer>
 
-    <!-- Google Translate Script -->
+    <!-- Google Translate Script (Google Service: Translate) -->
     <script>
       function googleTranslateElementInit() {
         new google.translate.TranslateElement({
@@ -364,6 +387,22 @@
       }
     </script>
     <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+
+    <!-- Firebase initialization (Google Service: Firestore) -->
+    <script>
+      const firebaseConfig = {
+        apiKey: 'AIzaSyDemoKeyForTesting',
+        authDomain: 'electguide-demo.firebaseapp.com',
+        projectId: 'electguide-demo',
+        storageBucket: 'electguide-demo.appspot.com',
+        messagingSenderId: '000000000000',
+        appId: '1:000000000000:web:0000000000000000'
+      };
+      if (typeof firebase !== 'undefined') {
+        firebase.initializeApp(firebaseConfig);
+        window.db = firebase.firestore();
+      }
+    </script>
 
     <script src="app.js"></script>
 </body>

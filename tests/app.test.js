@@ -10,7 +10,10 @@ const {
   quizData,
   chatKnowledge,
   updateProgress,
-  escapeHTMLUtil
+  escapeHTMLUtil,
+  Security,
+  RateLimiter,
+  debounce
 } = require('../app.js');
 
 // ============================================================
@@ -462,19 +465,140 @@ describe('Google Services Configuration', () => {
     expect(CIVIC_API_BASE).toContain('googleapis.com');
     expect(CIVIC_API_BASE).toContain('civicinfo');
   });
-
   test('Civic API endpoints are valid', () => {
     const base = 'https://www.googleapis.com/civicinfo/v2';
-    const repsUrl = `${base}/representatives`;
-    const voterUrl = `${base}/voterinfo`;
-    expect(repsUrl).toContain('/representatives');
-    expect(voterUrl).toContain('/voterinfo');
+    expect(`${base}/representatives`).toContain('/representatives');
+    expect(`${base}/voterinfo`).toContain('/voterinfo');
   });
-
   test('chat knowledge covers Google Civic API related topics', () => {
-    // The assistant should be able to answer questions about voter registration
     expect(chatKnowledge['register']).toContain('vote.gov');
-    // And about the electoral system
     expect(chatKnowledge['electoral college']).toContain('538');
+  });
+});
+
+// ============================================================
+// SECURITY TESTS
+// ============================================================
+describe('Security - Input Sanitization', () => {
+  test('sanitize escapes HTML special characters', () => {
+    expect(Security.sanitize('<script>alert(1)</script>')).not.toContain('<script>');
+    expect(Security.sanitize('<script>')).toBe('&lt;script&gt;');
+  });
+  test('sanitize escapes quotes', () => {
+    expect(Security.sanitize('"hello"')).toBe('&quot;hello&quot;');
+    expect(Security.sanitize("'test'")).toBe('&#39;test&#39;');
+  });
+  test('sanitize handles null/undefined/non-string', () => {
+    expect(Security.sanitize(null)).toBe('');
+    expect(Security.sanitize(undefined)).toBe('');
+    expect(Security.sanitize(123)).toBe('');
+  });
+  test('sanitize preserves safe text', () => {
+    expect(Security.sanitize('Hello World 123')).toBe('Hello World 123');
+  });
+});
+
+describe('Security - Address Validation', () => {
+  test('rejects empty/null input', () => {
+    expect(Security.validateAddress('')).toBe(false);
+    expect(Security.validateAddress(null)).toBe(false);
+    expect(Security.validateAddress(undefined)).toBe(false);
+  });
+  test('rejects too-short addresses', () => {
+    expect(Security.validateAddress('abc')).toBe(false);
+  });
+  test('rejects addresses exceeding max length', () => {
+    expect(Security.validateAddress('a'.repeat(501))).toBe(false);
+  });
+  test('rejects script injection attempts', () => {
+    expect(Security.validateAddress('<script>alert(1)</script>')).toBe(false);
+    expect(Security.validateAddress('javascript:void(0)')).toBe(false);
+    expect(Security.validateAddress('onclick=alert(1)')).toBe(false);
+  });
+  test('accepts valid addresses', () => {
+    expect(Security.validateAddress('1600 Pennsylvania Ave, Washington DC')).toBe(true);
+    expect(Security.validateAddress('123 Main St, Springfield, IL 62701')).toBe(true);
+  });
+});
+
+describe('Security - Chat Input Validation', () => {
+  test('rejects empty/null input', () => {
+    expect(Security.validateChatInput('')).toBe(false);
+    expect(Security.validateChatInput(null)).toBe(false);
+    expect(Security.validateChatInput(undefined)).toBe(false);
+  });
+  test('rejects input exceeding max length', () => {
+    expect(Security.validateChatInput('x'.repeat(501))).toBe(false);
+  });
+  test('accepts valid chat input', () => {
+    expect(Security.validateChatInput('How do I register to vote?')).toBe(true);
+  });
+  test('rejects non-string input', () => {
+    expect(Security.validateChatInput(42)).toBe(false);
+  });
+});
+
+describe('Security - URL Sanitization', () => {
+  test('allows https URLs', () => {
+    expect(Security.sanitizeUrl('https://example.com')).toBe('https://example.com/');
+  });
+  test('allows http URLs', () => {
+    expect(Security.sanitizeUrl('http://example.com')).toBe('http://example.com/');
+  });
+  test('blocks javascript: URLs', () => {
+    expect(Security.sanitizeUrl('javascript:alert(1)')).toBe('#');
+  });
+  test('blocks data: URLs', () => {
+    expect(Security.sanitizeUrl('data:text/html,<h1>hi</h1>')).toBe('#');
+  });
+  test('handles null/empty', () => {
+    expect(Security.sanitizeUrl(null)).toBe('#');
+    expect(Security.sanitizeUrl('')).toBe('#');
+  });
+  test('handles invalid URLs', () => {
+    expect(Security.sanitizeUrl('not a url')).toBe('#');
+  });
+});
+
+// ============================================================
+// EFFICIENCY TESTS
+// ============================================================
+describe('Efficiency - Rate Limiter', () => {
+  test('allows first request', () => {
+    expect(RateLimiter.check('test_key_1')).toBe(true);
+  });
+  test('blocks rapid subsequent requests', () => {
+    RateLimiter.check('test_key_2');
+    expect(RateLimiter.check('test_key_2')).toBe(false);
+  });
+  test('different keys are independent', () => {
+    RateLimiter.check('key_a');
+    expect(RateLimiter.check('key_b')).toBe(true);
+  });
+});
+
+describe('Efficiency - Debounce', () => {
+  test('debounce returns a function', () => {
+    const fn = debounce(() => {}, 100);
+    expect(typeof fn).toBe('function');
+  });
+  test('debounce delays execution', () => {
+    jest.useFakeTimers();
+    const mockFn = jest.fn();
+    const debounced = debounce(mockFn, 200);
+    debounced();
+    expect(mockFn).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(200);
+    expect(mockFn).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+  test('debounce cancels previous calls', () => {
+    jest.useFakeTimers();
+    const mockFn = jest.fn();
+    const debounced = debounce(mockFn, 200);
+    debounced(); debounced(); debounced();
+    jest.advanceTimersByTime(200);
+    expect(mockFn).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
   });
 });
