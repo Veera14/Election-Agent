@@ -9,6 +9,15 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="index.css">
+
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-XXXXXXXXXX');
+    </script>
 </head>
 <body>
     <!-- Animated Background -->
@@ -29,10 +38,13 @@
                 <a href="#hero" class="nav-link active" data-section="hero">Home</a>
                 <a href="#timeline" class="nav-link" data-section="timeline">Timeline</a>
                 <a href="#steps" class="nav-link" data-section="steps">Steps</a>
+                <a href="#civic" class="nav-link" data-section="civic">Voter Info</a>
                 <a href="#faq" class="nav-link" data-section="faq">FAQ</a>
                 <a href="#quiz" class="nav-link" data-section="quiz">Quiz</a>
                 <a href="#assistant" class="nav-link" data-section="assistant">Assistant</a>
             </div>
+            <!-- Google Translate -->
+            <div id="google_translate_element" class="google-translate-widget"></div>
             <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation">
                 <span></span><span></span><span></span>
             </button>
@@ -40,7 +52,7 @@
     </nav>
 
     <!-- Hero Section -->
-    <section id="hero" class="hero-section">
+    <section id="hero" class="hero-section" role="banner">
         <div class="hero-content">
             <div class="hero-badge">
                 <span class="badge-dot"></span>
@@ -109,7 +121,7 @@
     </section>
 
     <!-- Interactive Timeline Section -->
-    <section id="timeline" class="section timeline-section">
+    <section id="timeline" class="section timeline-section" role="region" aria-label="Election Timeline">
         <div class="section-container">
             <div class="section-header">
                 <span class="section-tag">Timeline</span>
@@ -130,8 +142,47 @@
         </div>
     </section>
 
+    <!-- Civic Information Section (Google Civic Information API) -->
+    <section id="civic" class="section civic-section" role="region" aria-label="Voter Information Lookup">
+        <div class="section-container">
+            <div class="section-header">
+                <span class="section-tag">Google Civic API</span>
+                <h2 class="section-title">Find Your Voter Info</h2>
+                <p class="section-desc">Enter your address to find polling locations, elected representatives, and election information powered by Google.</p>
+            </div>
+
+            <div class="civic-container">
+                <div class="civic-search-area">
+                    <div class="civic-input-group">
+                        <svg class="civic-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
+                        </svg>
+                        <input type="text" id="civic-address" class="civic-input" placeholder="Enter your U.S. address (e.g., 1600 Pennsylvania Ave, Washington DC)" autocomplete="street-address" aria-label="Enter your address for voter information">
+                    </div>
+                    <div class="civic-btn-group">
+                        <button class="btn btn-primary" id="civic-reps-btn">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                            Find Representatives
+                        </button>
+                        <button class="btn btn-glass" id="civic-elections-btn">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            Election Info
+                        </button>
+                    </div>
+                </div>
+
+                <div class="civic-results" id="civic-results" aria-live="polite">
+                    <div class="civic-placeholder">
+                        <div class="civic-placeholder-icon">🏛️</div>
+                        <p>Enter your address above to look up your representatives and election information using the <strong>Google Civic Information API</strong>.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- Steps Section -->
-    <section id="steps" class="section steps-section">
+    <section id="steps" class="section steps-section" role="region" aria-label="Voting Steps Guide">
         <div class="section-container">
             <div class="section-header">
                 <span class="section-tag">Step-by-Step Guide</span>
@@ -153,7 +204,7 @@
     </section>
 
     <!-- FAQ Section -->
-    <section id="faq" class="section faq-section">
+    <section id="faq" class="section faq-section" role="region" aria-label="Frequently Asked Questions">
         <div class="section-container">
             <div class="section-header">
                 <span class="section-tag">FAQ</span>
@@ -175,7 +226,7 @@
     </section>
 
     <!-- Quiz Section -->
-    <section id="quiz" class="section quiz-section">
+    <section id="quiz" class="section quiz-section" role="region" aria-label="Election Process Quiz">
         <div class="section-container">
             <div class="section-header">
                 <span class="section-tag">Test Your Knowledge</span>
@@ -223,7 +274,7 @@
     </section>
 
     <!-- Assistant Section -->
-    <section id="assistant" class="section assistant-section">
+    <section id="assistant" class="section assistant-section" role="region" aria-label="AI Chat Assistant">
         <div class="section-container">
             <div class="section-header">
                 <span class="section-tag">AI Assistant</span>
@@ -232,7 +283,7 @@
             </div>
 
             <div class="chat-container" id="chat-container">
-                <div class="chat-messages" id="chat-messages">
+                <div class="chat-messages" id="chat-messages" aria-live="polite" role="log">
                     <div class="chat-message bot-message">
                         <div class="message-avatar">🗳️</div>
                         <div class="message-content">
@@ -300,6 +351,19 @@
             </div>
         </div>
     </footer>
+
+    <!-- Google Translate Script -->
+    <script>
+      function googleTranslateElementInit() {
+        new google.translate.TranslateElement({
+          pageLanguage: 'en',
+          includedLanguages: 'en,es,fr,de,zh-CN,hi,ar,ja,ko,pt,ru',
+          layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+          autoDisplay: false
+        }, 'google_translate_element');
+      }
+    </script>
+    <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
 
     <script src="app.js"></script>
 </body>

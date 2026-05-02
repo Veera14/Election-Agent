@@ -62,6 +62,10 @@ const chatKnowledge = {
   "default": "That's a great question about the election process! Here's what I can tell you:\n\nThe U.S. election process involves multiple stages — from candidate announcements and primary elections through to Election Day and inauguration. Each step ensures that the democratic process is fair and transparent.\n\nTry asking me about specific topics like:\n• **Voter registration**\n• **The Electoral College**\n• **Primary elections**\n• **How votes are counted**\n• **Swing states**\n• **Inauguration Day**"
 };
 
+// ===== GOOGLE CIVIC INFORMATION API =====
+const CIVIC_API_KEY = 'AIzaSyDemoKeyForTesting'; // Replace with your Google API key
+const CIVIC_API_BASE = 'https://www.googleapis.com/civicinfo/v2';
+
 // ===== APP LOGIC =====
 document.addEventListener('DOMContentLoaded', () => {
   initNav();
@@ -71,7 +75,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initFAQ();
   initQuiz();
   initChat();
+  initCivicInfo();
   initScrollAnimations();
+  trackPageView();
 });
 
 // --- Navigation ---
@@ -91,7 +97,7 @@ function initNav() {
 }
 
 function updateActiveNav() {
-  const sections = ['hero', 'timeline', 'steps', 'faq', 'quiz', 'assistant'];
+  const sections = ['hero', 'timeline', 'civic', 'steps', 'faq', 'quiz', 'assistant'];
   let current = 'hero';
   sections.forEach(id => {
     const el = document.getElementById(id);
@@ -379,4 +385,173 @@ function initScrollAnimations() {
     });
   }, { threshold: 0.1 });
   document.querySelectorAll('.step-card, .faq-item').forEach(el => observer.observe(el));
+}
+
+// --- Google Civic Information API ---
+function initCivicInfo() {
+  const addressInput = document.getElementById('civic-address');
+  const repsBtn = document.getElementById('civic-reps-btn');
+  const electionsBtn = document.getElementById('civic-elections-btn');
+  const resultsDiv = document.getElementById('civic-results');
+
+  if (!repsBtn || !electionsBtn) return;
+
+  repsBtn.addEventListener('click', () => {
+    const address = addressInput.value.trim();
+    if (!address) { showCivicError('Please enter a valid U.S. address.'); return; }
+    fetchRepresentatives(address);
+    trackEvent('civic_api', 'find_representatives', address);
+  });
+
+  electionsBtn.addEventListener('click', () => {
+    const address = addressInput.value.trim();
+    if (!address) { showCivicError('Please enter a valid U.S. address.'); return; }
+    fetchVoterInfo(address);
+    trackEvent('civic_api', 'election_info', address);
+  });
+
+  addressInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') repsBtn.click();
+  });
+}
+
+function showCivicLoading() {
+  const resultsDiv = document.getElementById('civic-results');
+  resultsDiv.innerHTML = `<div class="civic-loading"><div class="civic-spinner"></div><p style="color:var(--text-muted)">Looking up information...</p></div>`;
+}
+
+function showCivicError(msg) {
+  const resultsDiv = document.getElementById('civic-results');
+  resultsDiv.innerHTML = `<div class="civic-error"><p>${msg}</p></div>`;
+}
+
+async function fetchRepresentatives(address) {
+  showCivicLoading();
+  const resultsDiv = document.getElementById('civic-results');
+  try {
+    const url = `${CIVIC_API_BASE}/representatives?address=${encodeURIComponent(address)}&key=${CIVIC_API_KEY}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    const data = await response.json();
+    renderRepresentatives(data);
+  } catch (err) {
+    showCivicError('Unable to fetch representative data. Please check your address and try again. Make sure you have a valid Google Civic API key configured.');
+    console.error('Civic API Error:', err);
+  }
+}
+
+async function fetchVoterInfo(address) {
+  showCivicLoading();
+  const resultsDiv = document.getElementById('civic-results');
+  try {
+    const url = `${CIVIC_API_BASE}/voterinfo?address=${encodeURIComponent(address)}&key=${CIVIC_API_KEY}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    const data = await response.json();
+    renderVoterInfo(data);
+  } catch (err) {
+    showCivicError('Unable to fetch election data. This may be because there are no upcoming elections for your area, or the API key needs to be configured.');
+    console.error('Civic API Error:', err);
+  }
+}
+
+function renderRepresentatives(data) {
+  const resultsDiv = document.getElementById('civic-results');
+  const officials = data.officials || [];
+  const offices = data.offices || [];
+
+  if (officials.length === 0) {
+    showCivicError('No representative data found for this address.');
+    return;
+  }
+
+  let html = `<div class="civic-section-label">Your Elected Representatives</div><div class="civic-cards">`;
+  offices.forEach(office => {
+    const indices = office.officialIndices || [];
+    indices.forEach(idx => {
+      const official = officials[idx];
+      if (!official) return;
+      const party = official.party ? `(${official.party})` : '';
+      const phone = official.phones ? official.phones[0] : '';
+      const url = official.urls ? official.urls[0] : '';
+      html += `
+        <div class="civic-card">
+          <div class="civic-card-title">${escapeHTMLUtil(official.name)} ${party}</div>
+          <div class="civic-card-subtitle">${escapeHTMLUtil(office.name)}</div>
+          <div class="civic-card-detail">
+            ${phone ? `📞 ${escapeHTMLUtil(phone)}<br>` : ''}
+            ${url ? `🔗 <a href="${escapeHTMLUtil(url)}" target="_blank" rel="noopener">Official Website</a>` : ''}
+          </div>
+        </div>`;
+    });
+  });
+  html += '</div>';
+  resultsDiv.innerHTML = html;
+}
+
+function renderVoterInfo(data) {
+  const resultsDiv = document.getElementById('civic-results');
+  let html = '';
+
+  if (data.election) {
+    html += `<div class="civic-section-label">Upcoming Election</div>
+      <div class="civic-cards"><div class="civic-card">
+        <div class="civic-card-title">${escapeHTMLUtil(data.election.name)}</div>
+        <div class="civic-card-subtitle">Date: ${escapeHTMLUtil(data.election.electionDay)}</div>
+      </div></div>`;
+  }
+
+  if (data.pollingLocations && data.pollingLocations.length > 0) {
+    html += `<div class="civic-section-label" style="margin-top:24px">Polling Locations</div><div class="civic-cards">`;
+    data.pollingLocations.slice(0, 3).forEach(loc => {
+      const addr = loc.address || {};
+      const line = [addr.line1, addr.city, addr.state, addr.zip].filter(Boolean).join(', ');
+      html += `<div class="civic-card">
+        <div class="civic-card-title">${escapeHTMLUtil(loc.address.locationName || 'Polling Location')}</div>
+        <div class="civic-card-detail">📍 ${escapeHTMLUtil(line)}</div>
+        ${loc.pollingHours ? `<div class="civic-card-detail">🕐 ${escapeHTMLUtil(loc.pollingHours)}</div>` : ''}
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  if (!html) {
+    showCivicError('No election information is currently available for this address.');
+    return;
+  }
+  resultsDiv.innerHTML = html;
+}
+
+// --- Utility: HTML escaping (shared) ---
+function escapeHTMLUtil(str) {
+  if (!str) return '';
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+// --- Google Analytics Event Tracking ---
+function trackPageView() {
+  if (typeof gtag === 'function') {
+    gtag('event', 'page_view', { page_title: document.title });
+  }
+}
+
+function trackEvent(category, action, label) {
+  if (typeof gtag === 'function') {
+    gtag('event', action, { event_category: category, event_label: label });
+  }
+}
+
+// --- Module Exports for Testing ---
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    timelineData,
+    stepsData,
+    faqData,
+    quizData,
+    chatKnowledge,
+    updateProgress,
+    escapeHTMLUtil
+  };
 }

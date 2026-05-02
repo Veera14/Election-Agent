@@ -1,0 +1,17 @@
+{
+  "name": "electguide",
+  "version": "1.0.0",
+  "description": "Interactive Election Process Assistant",
+  "main": "app.js",
+  "scripts": {
+    "test": "jest --verbose",
+    "test:coverage": "jest --coverage"
+  },
+  "keywords": ["election", "civic", "education"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  }
+}
